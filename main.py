@@ -1,6 +1,7 @@
 import cv2
 import time
 
+
 from config import (
     CAMERA_INDEX,
     STATIC_BLINK_THRESHOLD,
@@ -11,6 +12,52 @@ from vision.face_landmarker import FaceLandmarker
 from vision.ear import calculate_average_ear
 from blink.detector import BlinkDetector
 from blink.logger import BlinkLogger
+
+from blink.adaptive_threshold import AdaptiveThreshold
+
+blink_detector = BlinkDetector(
+    STATIC_BLINK_THRESHOLD
+)
+
+blink_logger = BlinkLogger(
+    BLINK_LOG_PATH
+)
+
+adaptive_threshold = AdaptiveThreshold()
+
+blink_count = 0
+
+
+def initialize_adaptive_threshold(adaptive_threshold):
+    short_blinks = [
+        96, 299, 241, 292, 290,
+        304, 303, 305, 351, 240,
+        291, 290, 352, 375, 364,
+        366, 329, 415, 353, 388,
+        358, 115
+    ]
+
+    long_blinks = [
+        479, 481, 668, 960, 936,
+        960, 964, 803, 984, 655,
+        772, 961, 875, 768, 837,
+        687, 959, 945, 834, 527,
+        907
+    ]
+
+    for duration in short_blinks:
+        adaptive_threshold.add_short_blink(duration)
+
+    for duration in long_blinks:
+        adaptive_threshold.add_long_blink(duration)
+
+
+initialize_adaptive_threshold(adaptive_threshold)
+
+print(
+    f"Adaptive threshold: "
+    f"{adaptive_threshold.get_threshold():.2f} ms"
+)
 
 
 def main():
@@ -88,9 +135,6 @@ def main():
                 2,
             )
 
-            # ------------------------------------------------
-            # Blink detection
-            # ------------------------------------------------
             (
                 blink_started,
                 blink_ended,
@@ -116,12 +160,24 @@ def main():
             # ------------------------------------------------
             if blink_ended:
                 blink_count += 1
-                blink_logger.log_blink(blink_count, blink_duration)
-                print(f"Blink #{blink_count}: {blink_duration} ms")
+
+                blink_logger.log_blink(
+                    blink_count,
+                    blink_duration,
+                )
+
+                symbol = adaptive_threshold.classify(blink_duration)
+
+                print(
+                    f"Blink #{blink_count}: "
+                    f"{blink_duration} ms "
+                    f"-> {symbol}"
+                )
+
                 cv2.putText(
                     frame,
-                    f"BLINK #{blink_count}: {blink_duration} ms",
-                    (30, 100),
+                    f"BLINK: {blink_duration} ms -> {symbol}",
+                    (30, 140),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.8,
                     (0, 255, 0),
@@ -135,6 +191,18 @@ def main():
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1,
                 (0, 165, 255),
+                2,
+            )
+
+        if adaptive_threshold.get_threshold() is not None:
+            cv2.putText(
+                frame,
+                f"Threshold: "
+                f"{adaptive_threshold.get_threshold():.1f} ms",
+                (30, 180),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 0),
                 2,
             )
 
