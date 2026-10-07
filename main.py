@@ -6,6 +6,8 @@ from config import (
     CAMERA_INDEX,
     STATIC_BLINK_THRESHOLD,
     BLINK_LOG_PATH,
+    MORSE_CHARACTER_GAP_MS,
+    MORSE_WORD_GAP_MS,
 )
 
 from vision.face_landmarker import FaceLandmarker
@@ -14,6 +16,8 @@ from blink.detector import BlinkDetector
 from blink.logger import BlinkLogger
 
 from blink.adaptive_threshold import AdaptiveThreshold
+    
+from morse.decoder import MorseDecoder
 
 blink_detector = BlinkDetector(
     STATIC_BLINK_THRESHOLD
@@ -24,6 +28,12 @@ blink_logger = BlinkLogger(
 )
 
 adaptive_threshold = AdaptiveThreshold()
+
+morse_decoder = MorseDecoder()
+
+last_blink_end_time = None
+
+decoded_text = ""
 
 blink_count = 0
 
@@ -68,6 +78,8 @@ def main():
     blink_logger = BlinkLogger(BLINK_LOG_PATH)
     blink_detector = BlinkDetector(STATIC_BLINK_THRESHOLD)
     blink_count = 0
+    last_blink_end_time = None
+    decoded_text = ""
 
     # --------------------------------------------------------
     # Open webcam
@@ -167,11 +179,15 @@ def main():
                 )
 
                 symbol = adaptive_threshold.classify(blink_duration)
+                symbols = morse_decoder.add_symbol(symbol)
+                
+                last_blink_end_time = timestamp_ms
 
                 print(
                     f"Blink #{blink_count}: "
                     f"{blink_duration} ms "
-                    f"-> {symbol}"
+                    f"-> {symbol} "
+                    f"-> {symbols}"
                 )
 
                 cv2.putText(
@@ -183,6 +199,17 @@ def main():
                     (0, 255, 0),
                     2,
                 )
+                
+                cv2.putText(
+                    frame,
+                    f"Morse: {symbols}",
+                    (30, 220),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 0),
+                    2
+                )
+
         else:
             cv2.putText(
                 frame,
@@ -193,6 +220,33 @@ def main():
                 (0, 165, 255),
                 2,
             )
+
+        if (
+            last_blink_end_time is not None
+            and morse_decoder.get_current_symbols()
+        ):
+
+            gap = (
+                timestamp_ms
+                - last_blink_end_time
+            )
+
+            if gap >= MORSE_CHARACTER_GAP_MS:
+
+                character = (
+                    morse_decoder.finish_character()
+                )
+
+                if character is not None:
+
+                    decoded_text += character
+
+                    print(
+                        f"Character decoded: "
+                        f"{character}"
+                    )
+            
+            
 
         if adaptive_threshold.get_threshold() is not None:
             cv2.putText(

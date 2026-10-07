@@ -20,3 +20,7 @@ CAMERA_INDEX = 0
 
 # Blink data output
 BLINK_LOG_PATH = "data/blink_log.csv"
+
+# Morse timing
+MORSE_CHARACTER_GAP_MS = 1500
+MORSE_WORD_GAP_MS = 3000
