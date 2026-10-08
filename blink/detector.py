@@ -4,7 +4,7 @@ class BlinkDetector:
         self,
         threshold,
         minimum_blink_duration_ms=80,
-        maximum_blink_duration_ms=1000
+        maximum_blink_duration_ms=1500
     ):
         self.threshold = threshold
 

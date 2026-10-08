@@ -15,8 +15,9 @@ from vision.ear import calculate_average_ear
 from blink.detector import BlinkDetector
 from blink.logger import BlinkLogger
 
+from blink.calibration import Calibration
 from blink.adaptive_threshold import AdaptiveThreshold
-    
+
 from morse.decoder import MorseDecoder
 
 blink_detector = BlinkDetector(
@@ -27,7 +28,14 @@ blink_logger = BlinkLogger(
     BLINK_LOG_PATH
 )
 
-adaptive_threshold = AdaptiveThreshold()
+adaptive_threshold = AdaptiveThreshold(
+    window_size=10,
+    minimum_separation_ms=50
+)
+
+calibration = Calibration(
+    adaptive_threshold
+)
 
 morse_decoder = MorseDecoder()
 
@@ -36,38 +44,6 @@ last_blink_end_time = None
 decoded_text = ""
 
 blink_count = 0
-
-
-def initialize_adaptive_threshold(adaptive_threshold):
-    short_blinks = [
-        96, 299, 241, 292, 290,
-        304, 303, 305, 351, 240,
-        291, 290, 352, 375, 364,
-        366, 329, 415, 353, 388,
-        358, 115
-    ]
-
-    long_blinks = [
-        479, 481, 668, 960, 936,
-        960, 964, 803, 984, 655,
-        772, 961, 875, 768, 837,
-        687, 959, 945, 834, 527,
-        907
-    ]
-
-    for duration in short_blinks:
-        adaptive_threshold.add_short_blink(duration)
-
-    for duration in long_blinks:
-        adaptive_threshold.add_long_blink(duration)
-
-
-initialize_adaptive_threshold(adaptive_threshold)
-
-print(
-    f"Adaptive threshold: "
-    f"{adaptive_threshold.get_threshold():.2f} ms"
-)
 
 
 def main():
@@ -171,45 +147,70 @@ def main():
             # Completed blink
             # ------------------------------------------------
             if blink_ended:
-                blink_count += 1
 
-                blink_logger.log_blink(
-                    blink_count,
-                    blink_duration,
-                )
+                duration_ms = blink_duration
 
-                symbol = adaptive_threshold.classify(blink_duration)
-                symbols = morse_decoder.add_symbol(symbol)
-                
+                if calibration.is_complete():
+
+                    # Normal Morse operation
+                    symbol = adaptive_threshold.classify(
+                        duration_ms
+                    )
+                    adapted = False
+
+                    if symbol is not None:
+
+                        adapted = adaptive_threshold.adapt(duration_ms)
+
+                        morse_decoder.add_symbol(
+                            symbol
+                        )
+
+                        print(
+                            f"Blink: {duration_ms} ms "
+                            f"-> {symbol}"
+                        )
+
+                        if adapted:
+
+                            print(
+                                "Adaptive update:"
+                            )
+
+                            print(
+                                f"  Short center: "
+                                f"{adaptive_threshold.get_short_center():.0f} ms"
+                            )
+
+                            print(
+                                f"  Long center: "
+                                f"{adaptive_threshold.get_long_center():.0f} ms"
+                            )
+
+                            print(
+                                f"  Threshold: "
+                                f"{adaptive_threshold.get_threshold():.0f} ms"
+                            )
+
+                else:
+
+                    # Calibration mode
+                    accepted = calibration.add_blink(
+                        duration_ms
+                    )
+
+                    if accepted:
+                        print(
+                            f"Calibration blink: "
+                            f"{duration_ms} ms"
+                        )
+                    else:
+                        print(
+                            f"Ignored calibration blink: "
+                            f"{duration_ms} ms"
+                        )
+
                 last_blink_end_time = timestamp_ms
-
-                print(
-                    f"Blink #{blink_count}: "
-                    f"{blink_duration} ms "
-                    f"-> {symbol} "
-                    f"-> {symbols}"
-                )
-
-                cv2.putText(
-                    frame,
-                    f"BLINK: {blink_duration} ms -> {symbol}",
-                    (30, 140),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2,
-                )
-                
-                cv2.putText(
-                    frame,
-                    f"Morse: {symbols}",
-                    (30, 220),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (255, 255, 0),
-                    2
-                )
-
         else:
             cv2.putText(
                 frame,
@@ -248,16 +249,98 @@ def main():
             
             
 
-        if adaptive_threshold.get_threshold() is not None:
+        if not calibration.is_complete():
+
+            phase = calibration.get_phase()
+
+            current, target = calibration.get_progress()
+
+            if phase == "SHORT":
+
+                instruction = "Perform SHORT blinks"
+
+            elif phase == "LONG":
+
+                instruction = "Perform LONG blinks"
+
+            else:
+
+                instruction = "Calibration complete"
+
             cv2.putText(
                 frame,
-                f"Threshold: "
-                f"{adaptive_threshold.get_threshold():.1f} ms",
-                (30, 180),
+                "CALIBRATION",
+                (30, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 255, 255),
+                2
+            )
+
+            cv2.putText(
+                frame,
+                instruction,
+                (30, 80),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
-                (255, 255, 0),
-                2,
+                (255, 255, 255),
+                2
+            )
+
+            cv2.putText(
+                frame,
+                f"Progress: {current}/{target}",
+                (30, 120),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2
+            )
+
+        else:
+
+            threshold = adaptive_threshold.get_threshold()
+            short_center = adaptive_threshold.get_short_center()
+            long_center = adaptive_threshold.get_long_center()
+
+            cv2.putText(
+                frame,
+                "READY - Morse input",
+                (30, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 255, 0),
+                2
+            )
+
+            cv2.putText(
+                frame,
+                f"Threshold: {threshold:.0f} ms",
+                (30, 80),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2
+            )
+
+            cv2.putText(
+                frame,
+                f"Short: {short_center:.0f} ms",
+                (30, 110),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                2
+            )
+
+            cv2.putText(
+                frame,
+                f"Long: {long_center:.0f} ms",
+                (30, 140),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                2
             )
 
         # ----------------------------------------------------
