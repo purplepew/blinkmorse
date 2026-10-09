@@ -2,7 +2,10 @@ import csv
 import statistics
 from pathlib import Path
 
-from config import BLINK_LOG_PATH
+from config import (
+    SHORT_BLINK_LOG_PATH,
+    LONG_BLINK_LOG_PATH,
+)
 
 
 def load_blink_durations(file_path):
@@ -68,11 +71,15 @@ def analyze_durations(durations):
 
 def main():
 
-    durations = load_blink_durations(
-        BLINK_LOG_PATH
+    print("=== Short Blink Analysis ===")
+    analyze_durations(
+        load_blink_durations(SHORT_BLINK_LOG_PATH)
     )
 
-    analyze_durations(durations)
+    print("\n=== Long Blink Analysis ===")
+    analyze_durations(
+        load_blink_durations(LONG_BLINK_LOG_PATH)
+    )
 
 
 if __name__ == "__main__":

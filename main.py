@@ -5,7 +5,8 @@ import time
 from config import (
     CAMERA_INDEX,
     STATIC_BLINK_THRESHOLD,
-    BLINK_LOG_PATH,
+    SHORT_BLINK_LOG_PATH,
+    LONG_BLINK_LOG_PATH,
     MORSE_CHARACTER_GAP_MS,
     MORSE_WORD_GAP_MS,
 )
@@ -24,8 +25,12 @@ blink_detector = BlinkDetector(
     STATIC_BLINK_THRESHOLD
 )
 
-blink_logger = BlinkLogger(
-    BLINK_LOG_PATH
+short_blink_logger = BlinkLogger(
+    SHORT_BLINK_LOG_PATH
+)
+
+long_blink_logger = BlinkLogger(
+    LONG_BLINK_LOG_PATH
 )
 
 adaptive_threshold = AdaptiveThreshold(
@@ -51,7 +56,8 @@ def main():
     # Initialize components
     # --------------------------------------------------------
     face_landmarker = FaceLandmarker()
-    blink_logger = BlinkLogger(BLINK_LOG_PATH)
+    short_blink_logger = BlinkLogger(SHORT_BLINK_LOG_PATH)
+    long_blink_logger = BlinkLogger(LONG_BLINK_LOG_PATH)
     blink_detector = BlinkDetector(STATIC_BLINK_THRESHOLD)
     blink_count = 0
     last_blink_end_time = None
@@ -160,6 +166,18 @@ def main():
 
                     if symbol is not None:
 
+                        logger = (
+                            short_blink_logger
+                            if symbol == "."
+                            else long_blink_logger
+                        )
+                        logger.log_blink(
+                            blink_count,
+                            duration_ms,
+                            "post_calibration"
+                        )
+                        blink_count += 1
+
                         adapted = adaptive_threshold.adapt(duration_ms)
 
                         morse_decoder.add_symbol(
@@ -195,11 +213,24 @@ def main():
                 else:
 
                     # Calibration mode
+                    calibration_phase = calibration.get_phase()
                     accepted = calibration.add_blink(
                         duration_ms
                     )
 
                     if accepted:
+                        logger = (
+                            short_blink_logger
+                            if calibration_phase == "SHORT"
+                            else long_blink_logger
+                        )
+                        logger.log_blink(
+                            blink_count,
+                            duration_ms,
+                            "calibration"
+                        )
+                        blink_count += 1
+
                         print(
                             f"Calibration blink: "
                             f"{duration_ms} ms"

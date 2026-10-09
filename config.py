@@ -18,8 +18,9 @@ STATIC_BLINK_THRESHOLD = 0.22
 
 CAMERA_INDEX = 0
 
-# Blink data output
-BLINK_LOG_PATH = "data/blink_log.csv"
+# Labeled blink data output
+SHORT_BLINK_LOG_PATH = "data/short_blink_log.csv"
+LONG_BLINK_LOG_PATH = "data/long_blink_log.csv"
 
 # Morse timing
 MORSE_CHARACTER_GAP_MS = 2500
